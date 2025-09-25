@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?><!--
+  - Application context for a web ui
+  --><Context>
+  <!-- Environment entry to control log file name -->
+  <Environment name="logback/context-name" override="false" type="java.lang.String" value="hack259"/>
+</Context>

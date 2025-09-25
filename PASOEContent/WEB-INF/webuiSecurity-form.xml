@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  - Application context containing http authentication control
+  -->
+
+<b:beans xmlns="http://www.springframework.org/schema/security"
+    xmlns:b="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+                        http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security.xsd">
+
+    <b:bean
+        class="org.springframework.web.servlet.handler.HandlerMappingIntrospector"
+        name="mvcHandlerMappingIntrospector"/>
+
+    <!-- Import XML fragements that contain externally defined property values
+         that can be used across multiple webuiSecurity configuration files -->
+    <b:bean
+        class="org.springframework.context.support.PropertySourcesPlaceholderConfigurer">
+        <b:property name="location" value="WEB-INF/webuiSecurity.properties" />
+    </b:bean>
+
+    <http pattern="/**"
+          auto-config="false" 
+          use-expressions="true" 
+          create-session="ifRequired" 
+          disable-url-rewriting="true" 
+          authentication-manager-ref="${http.web.authenticationManager}AuthenticationManager" 
+          realm="OpenEdge" >
+
+        <!-- OpenEdge CORS Filter -->
+        <custom-filter before="SECURITY_CONTEXT_FILTER" 
+                       ref="OECORSFilter" />
+
+        <!-- URL access controls -->
+
+
+        <!-- Restricted Mobile session class uses this page as part of its 
+             login() operation, protect it so it triggers user 
+             authentication -->
+        <intercept-url pattern="/static/home.html" 
+                       access="hasAnyRole('ROLE_PSCUser','ROLE_PSCUSER')"/>
+
+        <!-- The /ui space is a location where any/all restricted
+             GET access files go. -->
+        <intercept-url pattern="/ui/**" method="GET"
+                       access="hasAnyRole('ROLE_PSCUser','ROLE_PSCUSER')"/>
+
+        <!-- If non of the restricted space access rules trigger,
+             then apply the access control for all public data.
+             DO NOT grant /** permitAll() access  -->
+        <intercept-url pattern="/**" method="GET" 
+                    access="permitAll()"/>
+
+        <!-- authentication model -->
+        <form-login login-page="/login.html" 
+            login-processing-url="/static/auth/j_spring_security_check"
+            always-use-default-target="false"
+            default-target-url="/" 
+            authentication-failure-url="/WEB-INF/jsp/errorPage.jsp" 
+            authentication-success-handler-ref="OEAuthnSuccessHandler" 
+            />
+
+        <logout logout-url="/static/auth/j_spring_security_logout" 
+            invalidate-session="true" 
+            delete-cookies="JSESSIONID"
+            logout-success-url="/" 
+        />
+
+        <!--  
+        <remember-me />
+        -->
+
+        <!-- login session controls -->
+        <session-management session-fixation-protection="none" >
+            <concurrency-control error-if-maximum-exceeded="true"
+                expired-url="/WEB-INF/jsp/errorPage.jsp" 
+                max-sessions="10" />
+        </session-management>
+
+    </http>
+
+    <!-- This filter bean provides OpenEdge [ClientPrincipal] SSO token
+         generation.  When enabled a successful login via jspring_security_check
+         will return a JSON body that holds the SSO token, an optional 
+         refresh token. -->
+    <b:bean id="OEAuthnSuccessHandler"
+        class="com.progress.appserv.services.security.OEAuthnSuccessHandler">
+        <b:property name="tokenManager" ref="OESSOTokenManager" />
+        <b:property name="tokenPolicy" value="${OEAuthnSuccessHandler.tokenPolicy}" />
+        <b:property name="tokenDetail" value="${OEAuthnSuccessHandler.tokenDetail}" />
+        <b:property name="tokenSecure" value="${OEAuthnSuccessHandler.tokenSecure}" />
+    </b:bean>
+
+    <!-- This bean provides OpenEdge [ClientPrincipal] SSO token utilities
+         for either SSO token producers or SSO  token consumers. 
+         The OEAuthnSuccessHandler will reference this bean. -->
+    <b:bean id="OESSOTokenManager" 
+        class="com.progress.appserv.services.security.OECPSSOTokenManager" >
+        <b:property name="oecpFilter" ref="OEClientPrincipalFilter" />
+        <b:property name="ssoAllowScope" value="${OESSOTokenManager.ssoAllowScope}" />
+        <b:property name="ssoGrantScope" value="${OESSOTokenManager.ssoGrantScope}" />
+        <b:property name="ssoTokenExpires" value="${OESSOTokenManager.ssoTokenExpires}" />
+        <b:property name="ssoTokenRefresh" value="${OESSOTokenManager.ssoTokenRefresh}" />
+        <b:property name="ssoRefreshDeltaTime" value="${OESSOTokenManager.ssoRefreshDeltaTime}" />
+        <b:property name="ssoTokenURLEncode" value="${OESSOTokenManager.ssoTokenURLEncode}" />
+    </b:bean>
+
+
+    <!-- The security filter that turns a Spring token into an OpenEdge
+         ClientPrincipal object for SSO producers -->
+    <b:bean id="OEClientPrincipalFilter"
+             class="com.progress.appserv.services.security.OEClientPrincipalFilter">
+             <b:property name="enablecp" value="${OEClientPrincipalFilter.enabled}" />
+             <b:property name="domain" value="${OEClientPrincipalFilter.domain}" />
+             <b:property name="key" value="${OEClientPrincipalFilter.key}" />
+             <b:property name="accntinfo" value="${OEClientPrincipalFilter.accntinfo}" />
+             <b:property name="authz" value="${OEClientPrincipalFilter.authz}" />
+    </b:bean>
+
+    <!-- The security filter that implements the CORS standard for controling
+         cross site resource access by http clients. -->
+    <b:bean id="OECORSFilter"
+            class="com.progress.appserv.services.security.OECORSFilter" >
+      <b:constructor-arg ref="corsSource"/>
+      <b:property name="allowAll" value="${OECORSFilter.allowAll}" />
+    </b:bean>                
+    
+    <b:bean id="corsSource" class="org.springframework.web.cors.UrlBasedCorsConfigurationSource">
+      <b:property name="corsConfigurations">
+        <b:map>
+          <b:entry key="/**">
+            <b:bean class="com.progress.appserv.services.security.OECorsConfiguration">
+              <b:property name="responseHeaders" value="${OECORSFilter.responseHeaders}" />
+              <b:property name="allowDomains" value="${OECORSFilter.allowDomains}" />
+              <b:property name="allowSubdomains" value="${OECORSFilter.allowSubdomains}" />
+              <b:property name="allowMethods" value="${OECORSFilter.allowMethods}" />
+              <b:property name="messageHeaders" value="${OECORSFilter.messageHeaders}" />
+              <b:property name="supportCredentials" value="${OECORSFilter.supportCredentials}" />
+              <b:property name="maxAge" value="${OECORSFilter.maxAge}" />
+              <b:property name="allowAll" value="${OECORSFilter.allowAll}" />
+            </b:bean>
+          </b:entry>
+        </b:map>
+      </b:property>
+    </b:bean>
+
+    <!-- Define the LDAP server you will use for account authentication.
+         Refer to standard LDAP URL specification schemes for details.
+         You may, or may not, require a 'manager' fully qualified DN of
+         a user account that has 'search' permission in the directory tree.
+         Consult your Directory Service admin for more information.
+    -->
+
+    <!-- The LDAP server connection context: who to log into LDAP as to perform a search for a
+         simple user account name, starting at the base DN 
+    -->
+    <b:bean id="ldapContextSource"
+        class="org.springframework.security.ldap.DefaultSpringSecurityContextSource">
+
+        <!-- Provider Url an LDAP URL of the form ldap://localhost:389/base_dn -->
+        <b:constructor-arg value="${ldapContextSource.connectionUrl}"> </b:constructor-arg>
+        
+        <!-- Set the base suffix from which all operations should origin -->
+        <b:property name="base" value="${ldapContextSource.connectionBaseDN}" />
+
+        <!-- The LDAP user account name to login to the directory service with
+             in order to search for the user account being authenticated -->
+        <b:property name="userDn" value="${ldapContextSource.userLoginDn}" />
+
+        <!-- The LDAP user account name's password to login to the directory service with. -->
+        <b:property name="password" value="${ldapContextSource.userLoginPassword}" />
+
+        <!-- Set to handle referrals, Default is 'ignore'; setting this flag to 'follow' 
+             will enable referrals to be automatically followed -->
+        <b:property name="referral" value="${ldapContextSource.followReferral}"/>
+
+        <b:property name="baseEnvironmentProperties" >
+            <b:map>
+                <b:entry key="com.sun.jndi.ldap.connect.timeout" value="${ldapContextSource.connectTimeout}" />
+                <b:entry key="com.sun.jndi.ldap.read.timeout" value="${ldapContextSource.readTimeout}" /> 
+            </b:map>
+        </b:property>
+ 
+    </b:bean>
+
+    <!-- The LDAP user acount search operation's parameters used by the above ldapContextSource
+         that starts at a base DN, searches the entire subtree, and tries to find a user
+         object who's attribute matches the search filter
+     -->
+    <b:bean
+        class="org.springframework.security.ldap.search.FilterBasedLdapUserSearch"
+        id="ldapSearchBean">
+
+        <!-- user search base for finding user account DN for authentication -->
+        <b:constructor-arg value="${ldapSearchBean.userSearchBase}" />
+
+        <!-- LDAP search query to match the authenticated user-ID input with a
+             LDAP user account object's attribute value -->
+        <b:constructor-arg value="${ldapSearchBean.userSearchFilter}" />
+        
+        <b:constructor-arg ref="ldapContextSource" />
+
+        <!-- Search the search base's object and all sub trees -->
+        <b:property name="searchSubtree" value="${ldapSearchBean.userSearchSubtree}" />
+    </b:bean>
+
+    <!-- How to "bind" to an LDAP server, where "bind" is equivalent to logging in 
+         You either bind using a DN pattern or perform a user account search
+         using the above ldapSearchBean 
+     -->
+    <b:bean
+        class="org.springframework.security.ldap.authentication.BindAuthenticator"
+        id="ldapBindAuthenticator">
+        <b:constructor-arg ref="ldapContextSource" />
+        <b:property name="userSearch" ref="ldapSearchBean" />
+        <!-- Alternate to searching for the user's DN by using a fixed DN template.  This
+             can only be used when the user accounts are all contained within a single
+             branch of the directory tree.
+
+        <b:property name="userDnPatterns">
+           <b:list>
+              <b:value>"${sts.ldap.bind.userDnPatterns}"
+              </b:value>
+           </b:list>
+        </b:property>
+        -->
+    </b:bean>
+
+    <!-- This describes which LDAP  user account role memberships (aks. Spring authoriteis) to return 
+         into the security token to be used by the application's authorization processes.  The authorities
+         are found by searching the LDAP directory for objects whose attributes contain the user 
+         accounts fully qualified DN as a member
+     -->
+    <b:bean
+        class="org.springframework.security.ldap.userdetails.DefaultLdapAuthoritiesPopulator"
+        id="ldapAuthoritiesPopulator">
+        <b:constructor-arg ref="ldapContextSource" />
+
+        <!-- LDAP connection url -->
+        <b:constructor-arg value="${ldapAuthoritiesPopulator.groupSearchBase}" />
+
+        <!-- Where to begin searching for user group memberships in the directory service -->
+        <b:property name="groupSearchFilter" value="${ldapAuthoritiesPopulator.groupSearchFilter}" />
+
+        <!-- Map the LDAP group object attribute name to a Spring ROLE name -->
+        <b:property name="groupRoleAttribute" value="${ldapAuthoritiesPopulator.groupRoleAttribute}" />
+        
+        <!-- How deep in the directory tree to search to user group memberships -->
+        <b:property name="searchSubtree" value="${ldapAuthoritiesPopulator.groupSearchSubtree}" />
+
+        <!-- Ignore Active Directory mapping objects -->
+        <b:property name="ignorePartialResultException" value="${ldapAuthoritiesPopulator.groupIgnorePartialResultException}" />
+
+        <!-- Assign a Spring Role name prefix ; default is ROLE_ -->
+        <b:property name="rolePrefix" value="${ldapAuthoritiesPopulator.groupRolePrefix}" />
+        
+        <!-- Convert LDAP [group] ROLE names to upper case ; default is true -->
+        <b:property name="convertToUpperCase" value="${ldapAuthoritiesPopulator.groupConvertToUpperCase}" />
+    </b:bean>
+
+    <!-- This describes how to map LDAP user account (object) attributes into the security token
+     -->
+    <b:bean
+        class="org.springframework.security.ldap.userdetails.InetOrgPersonContextMapper"
+        id="ldapUserDetailsContextMapper">
+    </b:bean>
+
+    <!-- The LDAP authentication provider plug-in, with its references to the beans that
+         implement binding to the service, populating roles, and how to make a connection.
+    -->
+    <b:bean id="ldapAuthProvider"
+        class="org.springframework.security.ldap.authentication.LdapAuthenticationProvider">
+
+        <!-- LDAP login bean -->
+        <b:constructor-arg ref="ldapBindAuthenticator" />
+
+        <!-- LDAP user account granted [ROLE] group loader bean -->
+        <b:constructor-arg ref="ldapAuthoritiesPopulator" />
+
+        <b:property name="useAuthenticationRequestCredentials" value="${ldapAuthProvider.useAuthenticationRequestCredentials}" />
+
+        <!-- LDAP user account information loader bean -->
+        <b:property name="userDetailsContextMapper" ref="ldapUserDetailsContextMapper" />
+
+    </b:bean>
+
+
+    <!-- Authentication manager used to authenticate a user via a local user
+         account file (default: users.properties).
+         Note: If you enable password salting (recommened for production
+               installations) you may use the following Java console
+               utility to generate new passwords :
+                 com.progress.rest.security.EncodePassword class
+     -->
+    <authentication-manager id="localAuthenticationManager" >
+        <authentication-provider>
+            <!-- Uncomment to add strong password hashing in users.properties 
+            <password-encoder hash="sha-256" base64="true" >
+                <salt-source user-property="username" />
+            </password-encoder>
+            -->
+         <user-service properties="${userService.usersFile}" />
+        </authentication-provider>
+    </authentication-manager>
+
+    <!-- Authentication manager used to authenticate a user via a LDAP
+         compliant directory service
+    -->
+    <authentication-manager id="ldapAuthenticationManager" >
+        <authentication-provider ref="ldapAuthProvider" />
+    </authentication-manager>
+
+
+</b:beans>

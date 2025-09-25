@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  - Application context containing authentication, channel
+  - security and web URI beans.
+  -
+  - Only used by "filter" artifact.
+  -
+  -->
+
+<b:beans xmlns="http://www.springframework.org/schema/security"
+    xmlns:b="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+                        http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security.xsd">
+
+    <b:bean
+        class="org.springframework.web.servlet.handler.HandlerMappingIntrospector"
+        name="mvcHandlerMappingIntrospector"/>
+
+    <!-- Import XML fragements that contain externally defined property values
+         that can be used across multiple uiSecurity configuration files -->
+    <b:bean
+        class="org.springframework.context.support.PropertySourcesPlaceholderConfigurer">
+        <b:property name="location" value="WEB-INF/webuiSecurity.properties" />
+    </b:bean>
+
+    <!-- This HTTP security space represents the default public URI
+         space and controls the authentication/authorization process to its 
+         dynamic/static content.  
+         ALTER THIS SECTION TO MEET YOUR PRODUCTION DEPLOYMENT REQUIREMENTS
+     -->
+    <http pattern="/**"
+        auto-config="false" 
+        use-expressions="true" 
+        create-session="stateless" 
+        disable-url-rewriting="true" 
+        authentication-manager-ref="webuiApplicationAuth" 
+        entry-point-ref="http403ForbiddenEntryPoint"
+        realm="OpenEdge" >
+
+        <!-- OpenEdge CORS Filter -->
+        <custom-filter before="SECURITY_CONTEXT_FILTER" 
+                       ref="OECORSFilter" />
+
+        <!-- Define restricted spaces first 
+             NOTE: intercept-url ROLE names are CASE-SESINSTIVE!!!! 
+              Available access="<expression>" expressions:
+                # accesible only if user granted 'ROLE_<name>'
+                "hasRole('ROLE_<name>')"
+                "hasAnyRole( 'ROLE_<name>'[,'ROLE_<name2>' [,...] )"
+
+                "permitAll()"       # public access
+                "denyAll()"         # no access
+                "isAnonymous()"     # user is anonymous
+                "isAuthenticated"   #user not anonymous
+              See the Spring Security reference guide for
+              more Express-Based access control options
+         -->
+
+        <!-- /static/home.html is a standard used by any of
+             the OpenEdge client-side JS to test user login
+             session active.  -->
+        <intercept-url pattern="/static/home.htm*" method="GET"
+                       access="isAnonymous()"/>
+
+        <!-- The /ui space is a location where any/all restricted
+             GET access files go. -->
+        <intercept-url pattern="/ui/**" method="GET"
+                       access="isAnonymous()"/>
+
+        <!-- If non of the restricted space access rules trigger,
+             then apply the access control for all public data.
+             DO NOT grant /** permitAll() access  -->
+        <intercept-url pattern="/**" method="GET" 
+                    access="permitAll()"/>
+
+        <!-- Anonymous authentication model: inserts default
+             Filter to intercept non-authenticated users and 
+             an AuthenticationProvider bean into the AuthenticationManager
+         -->
+        <anonymous enabled="true" />
+
+        <!-- login session controls -->
+        <!--session-management session-fixation-protection="none" /-->
+
+        <!-- error handlers -->
+        <access-denied-handler error-page="/WEB-INF/jsp/errorPage.jsp" />
+
+    </http>
+
+    <!-- The security filter that implements the CORS standard for controling
+         cross site resource access by http clients. -->
+    <b:bean id="OECORSFilter"
+            class="com.progress.appserv.services.security.OECORSFilter" >
+      <b:constructor-arg ref="corsSource"/>
+      <b:property name="allowAll" value="${OECORSFilter.allowAll}" />
+    </b:bean>                
+    
+    <b:bean id="corsSource" class="org.springframework.web.cors.UrlBasedCorsConfigurationSource">
+      <b:property name="corsConfigurations">
+        <b:map>
+          <b:entry key="/**">
+            <b:bean class="com.progress.appserv.services.security.OECorsConfiguration">
+              <b:property name="responseHeaders" value="${OECORSFilter.responseHeaders}" />
+              <b:property name="allowDomains" value="${OECORSFilter.allowDomains}" />
+              <b:property name="allowSubdomains" value="${OECORSFilter.allowSubdomains}" />
+              <b:property name="allowMethods" value="${OECORSFilter.allowMethods}" />
+              <b:property name="messageHeaders" value="${OECORSFilter.messageHeaders}" />
+              <b:property name="supportCredentials" value="${OECORSFilter.supportCredentials}" />
+              <b:property name="maxAge" value="${OECORSFilter.maxAge}" />
+              <b:property name="allowAll" value="${OECORSFilter.allowAll}" />
+            </b:bean>
+          </b:entry>
+        </b:map>
+      </b:property>
+    </b:bean>
+
+    <b:bean id="http403ForbiddenEntryPoint"   
+          class="org.springframework.security.web.authentication.Http403ForbiddenEntryPoint" />
+
+    <!-- Authentication manager reserved for PUBLIC anonymous authentication 
+         to the static and dynamic application content.
+     -->
+    <authentication-manager id="webuiApplicationAuth" >
+    </authentication-manager>
+
+</b:beans>

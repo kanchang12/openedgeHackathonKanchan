@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee
+                      https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
+  version="6.0"
+  id="WebApp_ID" 
+  metadata-complete="true">
+
+  <display-name>OpenEdge Web UI</display-name>
+
+  <absolute-ordering />
+
+  <distributable/>
+
+  <!-- Define the location of this web application's logging 
+       configuration that applies to the application's Spring
+       and other Java components.  
+ -->
+  <env-entry>
+    <env-entry-name>logback/configuration-resource</env-entry-name>
+    <env-entry-type>java.lang.String</env-entry-type>
+    <env-entry-value>../logging.xml</env-entry-value>
+  </env-entry>
+
+  <!-- The 'detailLevel' context parameter is used to control
+       the level of detail inserted into the body of a dynamically
+       generated JSP error and exception HTML pages that are used
+       IF Spring, Tomcat, or any other Java component returns an
+       error or exception.  The valid 
+       numeric values are:
+            0               Use default values based on the 
+                            production/development product types
+            1       Terse   override the product type defaults and 
+                            supply terse static error code 
+                            descriptions/excption reason information
+            2       Verbose override the product type defaults and use
+                            verbose static error code 
+                            descriptions/exception stack trace information
+            3       Debug   override the product type defaults and add 
+                            jsp page debugging information to the Verbose 
+                            output
+  -->
+  <context-param>    
+    <param-name>detailLevel</param-name>
+    <param-value>0</param-value>
+  </context-param>
+
+<!-- BEGIN:Spring security.definition  -->
+    <!--
+      - Location of the Spring Security XML configuration file that 
+        defines the which security model this web application should
+        employ. The configuration is loaded and applied by the
+        ContextLoaderListener.
+      -->
+    <context-param>
+        <param-name>contextConfigLocation</param-name>
+        <param-value>
+          <!-- USER EDIT: Select which application security model to employ 
+            /WEB-INF/webuiSecurity-anonymous.xml
+            /WEB-INF/webuiSecurity-basic.xml
+            /WEB-INF/webuiSecurity-form.xml
+            /WEB-INF/webuiSecurity-container.xml
+          -->
+            /WEB-INF/webuiSecurity-anonymous.xml
+        </param-value>
+    </context-param>
+
+    <!-- This listener needs to be first for logging of the web application
+         startup operations. -->
+    <listener>
+      <listener-class>ch.qos.logback.classic.selector.servlet.ContextDetachingSCL</listener-class>
+    </listener>
+
+    <!-- The Spring Security listener needs to be loaded immediately after
+         the logging listener.  It will initialize the entire security
+         policy configured in the contextConfigLocation parameter above -->
+    <listener>
+        <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+    </listener>
+
+   <!-- This section sets up the Spring Security requst filter that
+        is mapped to the entire web application's URI space.  All
+        requests will now be controlled by Spring Security.
+        DO NOT CHANGE or you will compromise the web application's 
+        security. -->
+    <filter>
+      <filter-name>springSecurityFilterChain</filter-name>
+      <filter-class>org.springframework.web.filter.DelegatingFilterProxy</filter-class>
+    </filter>
+
+    <filter-mapping>
+      <filter-name>springSecurityFilterChain</filter-name>
+      <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+    <!-- Add the Spring MVC functionality to allow access to the built-in
+         MVC support for dynamic page generation -->
+    <servlet>
+      <servlet-name>mvc-dispatch</servlet-name>
+      <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+      <init-param>
+        <param-name>contextConfigLocation</param-name>
+        <param-value>/WEB-INF/mvc-dispatch-context.xml</param-value>
+      </init-param>
+      <load-on-startup>1</load-on-startup>
+    </servlet>
+
+<!-- END:Spring security.definition  -->
+
+    <!-- Filter class uses for the web application's file logger -->
+    <filter>
+      <filter-name>LoggerContextFilter</filter-name>
+      <filter-class>com.progress.appserv.services.logging.LoggerContextFilter</filter-class>
+    </filter>
+    <filter-mapping>
+      <filter-name>LoggerContextFilter</filter-name>
+      <url-pattern>/*</url-pattern>
+    </filter-mapping>
+
+
+<!-- BEGIN: standards based web application HTTP session controls used by 
+     Spring Security webuiSecurity-container configurations. -->
+
+    <!-- USER EDIT: uncomment the <session-config> element below to
+         control these HTTP session run-time attributes. 
+
+        <http-only> {true|false} Block cookie access to JavaScript
+        <secure>    {true|false} Require HTTPS for transmitting cookie
+        <tracking-mode> {COOKIE|URL|SSL} How session id communicated to client
+        <session-timeout> {minutes}  How many minutes for a session to be 
+                    idle before deletion
+    -->
+    <session-config>
+        <session-timeout>30</session-timeout>
+        <!--
+        <cookie-config>
+            <http-only>true</http-only>
+            <secure>false</secure>
+        </cookie-config>
+        <tracking-mode>URL</tracking-mode>
+        -->
+    </session-config>
+
+<!-- BEGIN:container.security when using the Spring Security policy
+     configuration oeablSecurity-container.xml -->
+
+    <!-- USER EDIT: uncomment and configure container security ONLY if 
+         oeablSecurity-container.xml is configured for the Spring 
+         security above 
+         The <auth-constraint> element needs to define the roles
+         returned by the Java container's authentication.  Those
+         Same role names need to be configured in oeablSecurity-container.xml
+    -->
+    <!--
+    <security-constraint>
+        <display-name>REST Manager Container Security Constraint</display-name>
+        <web-resource-collection>
+            <web-resource-name>Protected Area</web-resource-name>
+            <url-pattern>/*</url-pattern>
+
+            <http-method>DELETE</http-method>
+            <http-method>GET</http-method>
+            <http-method>POST</http-method>
+            <http-method>PUT</http-method>
+            <http-method>HEAD</http-method>
+
+        </web-resource-collection>
+        <auth-constraint>
+            <role-name>ROLE_PSCAdmin</role-name>
+            <role-name>ROLE_PSCOper</role-name>
+            <role-name>ROLE_PSCUser</role-name>
+        </auth-constraint>
+    </security-constraint>
+
+    <login-config>
+        <auth-method>BASIC</auth-method>
+        <realm-name>OpenEdge</realm-name>
+    </login-config>
+
+    <security-role>
+        <role-name>ROLE_PSCAdmin</role-name>
+    </security-role>
+    <security-role>
+        <role-name>ROLE_PSCOper</role-name>
+    </security-role>
+    <security-role>
+        <role-name>ROLE_PSCUser</role-name>
+    </security-role>
+
+    -->
+
+<!-- END:container.security-->
+
+<!-- BEGIN: container managed http error and welcome pages -->
+
+  <!-- declare the page(s) to use when the client URI
+       points to the root path "/" of the web application
+   -->
+  <welcome-file-list>
+    <welcome-file>index.html</welcome-file>
+  </welcome-file-list>
+
+  <!-- Dynamic error and exception pages written using JSP -->
+
+  <!-- The following is catch-all JSP error handling page that
+       will get triggered for any of the 400 & 500 class errors
+
+       An example of declaring a JSP or static html page for
+       a specific error code 403:
+
+      <error-page>
+        <error-code>403</error-code>
+        <location>/WEB-INF/jsp/errorPage403.jsp</location> 
+      </error-page>
+   -->
+
+  <error-page>
+    <location>/WEB-INF/jsp/errorPage.jsp</location> 
+  </error-page>
+
+  <!-- The following is catch-all JSP excpetion handling page that
+       will get triggered for any JAVA excpetions that are not
+       handled by the transport servlets/filters 
+   -->
+  <error-page>
+    <exception-type>java.lang.Throwable</exception-type>
+    <location>/WEB-INF/jsp/exceptionPage.jsp</location> 
+  </error-page>
+
+<!-- END: container managed http error and welcome pages -->
+
+</web-app>

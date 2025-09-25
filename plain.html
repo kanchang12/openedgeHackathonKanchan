@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>ML Dashboard</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; }
+  h1, h2 { color: #333; }
+  button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+  hr { border-top: 1px solid #eee; margin: 20px 0; }
+  #result, #recommendation-text { 
+    background-color: #f9f9f9; 
+    border: 1px solid #ddd; 
+    padding: 15px; 
+    margin-top: 10px; 
+    border-radius: 5px;
+  }
+  .positive-impact { color: green; font-weight: bold; }
+  .negative-impact { color: red; font-weight: bold; }
+  .neutral-impact { color: orange; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>Price Elasticity ML Model</h1>
+<h2>Training Data: 379,336 samples | Test: 108,436 samples | R2: 0.291</h2>
+<hr>
+<button onclick="getProduct()">Get Product</button>
+<button onclick="testPrice(1.1)">Test 10% Increase</button>
+<button onclick="testPrice(1.2)">Test 20% Increase</button>
+<button onclick="testPrice(1.3)">Test 30% Increase</button>
+<button onclick="testPrice(0.9)">Test 10% Decrease</button>
+<hr>
+<button onclick="findOptimumPrice()">Find Optimum Price</button>
+<hr>
+<div id="result">Results will appear here</div>
+<hr>
+<h3>Business Recommendation & Explanation:</h3>
+<div id="recommendation-text">Run a price test to see the recommendation.</div>
+
+<script>
+var product = null;
+
+function getProduct() {
+  fetch('http://localhost:5001/product/random')
+    .then(r => r.json())
+    .then(d => {
+      product = d;
+      document.getElementById('result').innerHTML = 
+        'Product: ' + d.stock_code + '<br>' +
+        'Current Price: ' + d.current_price + '<br>' +
+        'Current Qty: ' + d.current_quantity;
+      document.getElementById('recommendation-text').innerHTML = 'Product loaded. Now test a price change!'; 
+    })
+    .catch(e => {
+      document.getElementById('result').innerHTML = 'ERROR: Python API not running or unreachable.';
+      document.getElementById('recommendation-text').innerHTML = 'Cannot get product data. Ensure your Python API is running on localhost:5001.';
+    });
+}
+
+function testPrice(multiplier) {
+  if (!product) {
+    alert('Please get a product first!');
+    return;
+  }
+  
+  document.getElementById('recommendation-text').innerHTML = 'Processing...';
+
+  fetch('http://localhost:5001/predict/elasticity', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      stock_code: product.stock_code,
+      original_price: product.current_price,
+      new_price: product.current_price * multiplier
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('result').innerHTML = 
+      'Test Price: ' + (product.current_price * multiplier).toFixed(2) + '<br>' +
+      'Type: ' + d.elasticity_type + '<br>' +
+      'Elasticity: ' + d.elasticity + '<br>' +
+      'Revenue Change: ' + (d.revenue_change * 100).toFixed(2) + '%'; 
+
+    let explanation = "";
+    let impactClass = "";
+    let currentPriceChange = (multiplier - 1) * 100;
+
+    const elasticityValue = parseFloat(d.elasticity);
+    const revenueChangeValue = parseFloat(d.revenue_change);
+
+    if (isNaN(elasticityValue) || isNaN(revenueChangeValue)) {
+        explanation = "<p><strong>Error:</strong> Could not parse elasticity or revenue change. Check API response format.</p>";
+        impactClass = "neutral-impact";
+    } else {
+        if (currentPriceChange > 0) { 
+            explanation += `<p>You are proposing to **increase the price by ${currentPriceChange.toFixed(0)}%** from ${product.current_price.toFixed(2)} to ${(product.current_price * multiplier).toFixed(2)}.</p>`;
+            
+            if (d.elasticity_type === 'ELASTIC' || elasticityValue < -1) {
+                explanation += `<p>This product is **${d.elasticity_type.toUpperCase()}** (Elasticity: ${elasticityValue.toFixed(2)}). This means customers are **very sensitive to price changes**.</p>`;
+                explanation += `<p>A ${currentPriceChange.toFixed(0)}% price increase is predicted to cause a proportionally **much larger drop in sales volume**.</p>`;
+                
+                if (revenueChangeValue < 0) {
+                    explanation += `<p class="negative-impact">**Recommendation:** Your model predicts a **${(revenueChangeValue * 100).toFixed(2)}% decrease in total revenue**. It is generally **NOT recommended to increase the price** for an elastic product, as you will likely lose money overall. Consider a discount strategy instead.</p>`;
+                    impactClass = "negative-impact";
+                } else if (revenueChangeValue > 0) {
+                    explanation += `<p class="neutral-impact">**Recommendation:** While the product is elastic, your model strangely predicts a **${(revenueChangeValue * 100).toFixed(2)}% increase in total revenue**. This is unusual for an elastic product with a price increase. You should **exercise caution** and further investigate this prediction (e.g., check other influencing factors or model accuracy, given the R2 of 0.291). A positive revenue change for an elastic product with a price increase is a red flag.</p>`;
+                    impactClass = "neutral-impact";
+                } else {
+                    explanation += `<p class="neutral-impact">**Recommendation:** Your model predicts no change in total revenue. For an elastic product, this suggests the increase in price per unit is exactly offset by the drop in quantity sold. Further analysis is needed.</p>`;
+                    impactClass = "neutral-impact";
+                }
+
+            } else if (d.elasticity_type === 'INELASTIC' || (elasticityValue >= -1 && elasticityValue < 0)) { 
+                explanation += `<p>This product is **${d.elasticity_type.toUpperCase()}** (Elasticity: ${elasticityValue.toFixed(2)}). This means customers are **less sensitive to price changes**.</p>`;
+                explanation += `<p>A ${currentPriceChange.toFixed(0)}% price increase is predicted to cause a proportionally **smaller drop in sales volume**, or potentially no drop.</p>`;
+
+                if (revenueChangeValue > 0) {
+                    explanation += `<p class="positive-impact">**Recommendation:** Your model predicts a **${(revenueChangeValue * 100).toFixed(2)}% increase in total revenue**. It is generally **RECOMMENDED to increase the price** for an inelastic product to maximize profits.</p>`;
+                    impactClass = "positive-impact";
+                } else if (revenueChangeValue < 0) {
+                     explanation += `<p class="neutral-impact">**Recommendation:** While the product is inelastic, your model strangely predicts a **${(revenueChangeValue * 100).toFixed(2)}% decrease in total revenue**. This is unusual for an inelastic product with a price increase. You should **exercise caution** and further investigate this prediction (e.g., check other influencing factors or model accuracy, given the R2 of 0.291).</p>`;
+                    impactClass = "neutral-impact";
+                } else {
+                    explanation += `<p class="neutral-impact">**Recommendation:** Your model predicts no change in total revenue. For an inelastic product, this is unusual. Further analysis is needed.</p>`;
+                    impactClass = "neutral-impact";
+                }
+
+            } else if (d.elasticity_type === 'UNITARY' || elasticityValue === -1) { 
+                explanation += `<p>This product has **UNITARY ELASTICITY** (Elasticity: ${elasticityValue.toFixed(2)}). This means sales volume changes proportionally to price.</p>`;
+                explanation += `<p class="neutral-impact">**Recommendation:** A price change will likely result in **no significant change in total revenue**. Consider other strategic goals besides revenue maximization for this product.</p>`;
+                impactClass = "neutral-impact";
+            }
+
+        } else if (currentPriceChange < 0) { 
+            explanation += `<p>You are proposing to **decrease the price by ${Math.abs(currentPriceChange).toFixed(0)}%** from ${product.current_price.toFixed(2)} to ${(product.current_price * multiplier).toFixed(2)}.</p>`;
+            
+            if (d.elasticity_type === 'ELASTIC' || elasticityValue < -1) {
+                explanation += `<p>This product is **${d.elasticity_type.toUpperCase()}** (Elasticity: ${elasticityValue.toFixed(2)}). This means customers are **very sensitive to price changes**.</p>`;
+                explanation += `<p>A ${Math.abs(currentPriceChange).toFixed(0)}% price decrease is predicted to cause a proportionally **much larger increase in sales volume**.</p>`;
+                
+                if (revenueChangeValue > 0) {
+                    explanation += `<p class="positive-impact">**Recommendation:** Your model predicts a **${(revenueChangeValue * 100).toFixed(2)}% increase in total revenue**. It is generally **RECOMMENDED to decrease the price** for an elastic product, as you will likely gain more revenue overall.</p>`;
+                    impactClass = "positive-impact";
+                } else if (revenueChangeValue < 0) {
+                    explanation += `<p class="neutral-impact">**Recommendation:** While the product is elastic, your model strangely predicts a **${(revenueChangeValue * 100).toFixed(2)}% decrease in total revenue**. This is unusual for an elastic product with a price decrease. You should **exercise caution** and further investigate this prediction (e.g., check other influencing factors or model accuracy, given the R2 of 0.291).</p>`;
+                    impactClass = "neutral-impact";
+                } else {
+                    explanation += `<p class="neutral-impact">**Recommendation:** Your model predicts no change in total revenue. For an elastic product, this is unusual with a price decrease. Further analysis is needed.</p>`;
+                    impactClass = "neutral-impact";
+                }
+
+            } else if (d.elasticity_type === 'INELASTIC' || (elasticityValue >= -1 && elasticityValue < 0)) { 
+                explanation += `<p>This product is **${d.elasticity_type.toUpperCase()}** (Elasticity: ${elasticityValue.toFixed(2)}). This means customers are **less sensitive to price changes**.</p>`;
+                explanation += `<p>A ${Math.abs(currentPriceChange).toFixed(0)}% price decrease is predicted to cause a proportionally **smaller increase in sales volume**, or no increase.</p>`;
+
+                if (revenueChangeValue < 0) {
+                    explanation += `<p class="negative-impact">**Recommendation:** Your model predicts a **${(revenueChangeValue * 100).toFixed(2)}% decrease in total revenue**. It is generally **NOT recommended to decrease the price** for an inelastic product, as you will likely lose money overall without significantly boosting sales.</p>`;
+                    impactClass = "negative-impact";
+                } else if (revenueChangeValue > 0) {
+                     explanation += `<p class="neutral-impact">**Recommendation:** While the product is inelastic, your model strangely predicts a **${(revenueChangeValue * 100).toFixed(2)}% increase in total revenue**. This is unusual for an inelastic product with a price decrease. You should **exercise caution** and further investigate this prediction (e.g., check other influencing factors or model accuracy, given the R2 of 0.291).</p>`;
+                    impactClass = "neutral-impact";
+                } else {
+                    explanation += `<p class="neutral-impact">**Recommendation:** Your model predicts no change in total revenue. For an inelastic product, this is unusual with a price decrease. Further analysis is needed.</p>`;
+                    impactClass = "neutral-impact";
+                }
+
+            } else if (d.elasticity_type === 'UNITARY' || elasticityValue === -1) { 
+                explanation += `<p>This product has **UNITARY ELASTICITY** (Elasticity: ${elasticityValue.toFixed(2)}). This means sales volume changes proportionally to price.</p>`;
+                explanation += `<p class="neutral-impact">**Recommendation:** A price change will likely result in **no significant change in total revenue**. Consider other strategic goals besides revenue maximization for this product.</p>`;
+                impactClass = "neutral-impact";
+            }
+        } else { 
+            explanation += `<p>No price change tested.</p>`;
+            impactClass = "neutral-impact";
+        }
+
+        explanation += `<p class="neutral-impact"><em>Note: Your model's R2 value is 0.291, meaning it explains about 29.1% of demand variability. Always use these predictions as a guide and consider other market factors.</em></p>`;
+    }
+
+    const recommendationDiv = document.getElementById('recommendation-text');
+    recommendationDiv.innerHTML = explanation;
+    recommendationDiv.className = impactClass;
+  })
+  .catch(e => {
+    document.getElementById('result').innerHTML = 'ERROR: Prediction API not running or unreachable.';
+    document.getElementById('recommendation-text').innerHTML = 'Cannot get prediction. Ensure your Python API is running on localhost:5001.';
+  });
+}
+
+function findOptimumPrice() {
+  if (!product) {
+    alert('Please get a product first!');
+    return;
+  }
+
+  document.getElementById('result').innerHTML = 'Calculating optimum price...';
+  document.getElementById('recommendation-text').innerHTML = 'Sending request to find the best price to maximize revenue. This feature requires a new endpoint in your Python API.';
+
+  fetch('http://localhost:5001/predict/optimum-price', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ stock_code: product.stock_code })
+  })
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById('result').innerHTML = 'Optimum Price: ' + d.optimum_price.toFixed(2);
+    document.getElementById('recommendation-text').innerHTML = 
+      `<p class="positive-impact">**Recommendation:** The model predicts that the **optimum price** for this product is **${d.optimum_price.toFixed(2)}**.</p>` +
+      '<p>At this price, the product\'s demand is expected to be **unit-elastic**, which typically leads to **maximum total revenue**.</p>';
+  })
+  .catch(e => {
+    document.getElementById('result').innerHTML = 'ERROR: Optimum price API endpoint not found or unreachable.';
+    document.getElementById('recommendation-text').innerHTML = 'Please check if the `/predict/optimum-price` endpoint exists in your Python API.';
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+================================================
+        ML PRICE OPTIMIZATION SESSION
+        Training: 379,336 | Test: 108,436
+        R² Score: 0.291
+================================================
+
+Getting random product from API...
+Product fetched successfully:
+  Stock Code:  
+  Description: 
+  Price:       £  0.00
+  Quantity:    0
+
+Requesting ML prediction...
+╔══════════════════════════════════════════════╗
+║            ML ANALYSIS RESULTS               ║
+╚══════════════════════════════════════════════╝
+
+PRICING ANALYSIS:
+  Current Price:    £   0.00
+  Optimal Price:    £   0.00
+  Price Difference: ?%
+
+REVENUE ANALYSIS:
+  Current Revenue:  £      0.00
+  Optimal Revenue:  £      0.00
+  Revenue Impact:   ?%
+
+ELASTICITY:
+  Product Type: 
+
+╔══════════════════════════════════════════════╗
+║           BUSINESS RECOMMENDATION            ║
+╚══════════════════════════════════════════════╝
+
+✓ Product is NOT PRICE SENSITIVE (Inelastic)
+→ RECOMMENDATION: OPTIMAL PRICE ACHIEVED
+  Current price maximizes revenue
+================================================
+Session completed: 09/25/2025 09:57:31
+Dashboard available at: http://localhost:5001/
+================================================
